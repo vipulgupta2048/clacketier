@@ -1,0 +1,209 @@
+// Clacketier: real Cherry MX keyboard sounds under every key you type into Command
+// Code. Command Code's `keypress` event says what kind of key it was (never which one);
+// this picks a recorded key for it and plays it in a few milliseconds.
+//
+//   /clacketier              status, and every keyboard
+//   /clacketier blue         switch to Cherry MX Blue (also brown, red)
+//   /clacketier volume 30    how loud
+//
+// On macOS one long-lived player (players/macos-key-player.js) keeps up with fast
+// typing; elsewhere each key goes through the host's audio player. It stays quiet in
+// CI, over SSH, and when CLACKETIER=off.
+
+import { createHash } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+	formatStatus,
+	describePrefs,
+	parseArgs,
+	USAGE,
+} from "./src/command.js";
+import { type KeyPlayer, startKeyPlayer } from "./src/key-player.js";
+import {
+	findKeyboard,
+	isKeypressKind,
+	KEY_SOUNDS,
+	KEYBOARDS,
+	keySoundFor,
+	keySoundPath,
+	MAX_KEYS_IN_FLIGHT,
+	MIN_KEY_GAP_MS,
+} from "./src/keyboards.js";
+import type { ModApi } from "./src/mod-api.js";
+import { PREFS_STORE_KEY, parsePrefs, type Prefs } from "./src/prefs.js";
+import { QUIET_NOTES, quietReason } from "./src/quiet.js";
+import { scalePcm16Wav } from "./src/volume.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SOUNDS_DIR = join(HERE, "sounds");
+const KEY_PLAYER_SCRIPT = join(HERE, "players", "macos-key-player.js");
+const VOLUME_CACHE_DIR = join(tmpdir(), "clacketier");
+const PLAY_TIMEOUT_MS = 2_000;
+
+// Off macOS: the file to hand the host's player, a quieter copy of the WAV below full
+// volume (cached per file and volume). Anything unreadable plays as it is.
+async function audibleFile(file: string, volume: number): Promise<string> {
+	if (volume >= 100) return file;
+	try {
+		const { size, mtimeMs } = statSync(file);
+		const key = createHash("sha1")
+			.update(`${file}\0${size}\0${mtimeMs}`)
+			.digest("hex")
+			.slice(0, 12);
+		const copy = join(VOLUME_CACHE_DIR, `${key}-${volume}.wav`);
+		if (existsSync(copy)) return copy;
+		const scaled = scalePcm16Wav({ wav: await readFile(file), volume });
+		if (!scaled) return file;
+		await mkdir(VOLUME_CACHE_DIR, { recursive: true });
+		// Write then rename, so an interrupted write never leaves a clipped copy behind.
+		const partial = `${copy}.${process.pid}.tmp`;
+		await writeFile(partial, scaled);
+		await rename(partial, copy);
+		return copy;
+	} catch {
+		return file;
+	}
+}
+
+export default function clacketier(cmd: ModApi): void {
+	let prefs: Prefs = parsePrefs(cmd.store.get(PREFS_STORE_KEY));
+	let isPlayerMissing = false;
+
+	const isAudible = (): boolean =>
+		prefs.isOn &&
+		prefs.volume > 0 &&
+		!isPlayerMissing &&
+		quietReason(process.env) === undefined;
+
+	// Started on the first click (or at session start), so a session with the clicks off
+	// never spawns it. CLACKETIER_PLAYER=host plays every key through cmd.audio.play.
+	let keyPlayer: KeyPlayer | undefined;
+	let isKeyPlayerTried = false;
+	let preloadedKeyboard: string | undefined;
+	const preloaded = (player: KeyPlayer): KeyPlayer => {
+		if (preloadedKeyboard === prefs.keyboard) return player;
+		preloadedKeyboard = prefs.keyboard;
+		player.preload(
+			KEY_SOUNDS.map((sound) =>
+				keySoundPath({
+					soundsDir: SOUNDS_DIR,
+					keyboard: prefs.keyboard,
+					sound,
+				}),
+			),
+		);
+		return player;
+	};
+	const keyPlayerFor = (): KeyPlayer | undefined => {
+		if (keyPlayer?.isAlive()) return preloaded(keyPlayer);
+		if (isKeyPlayerTried) return undefined;
+		isKeyPlayerTried = true;
+		if (process.env.CLACKETIER_PLAYER === "host") return undefined;
+		keyPlayer = startKeyPlayer({
+			platform: process.platform,
+			scriptPath: KEY_PLAYER_SCRIPT,
+		});
+		return keyPlayer ? preloaded(keyPlayer) : undefined;
+	};
+	// Start the player before the first key, so keys typed while it loads its audio engine
+	// are not lost. Only a terminal (TTY) host sends keypress events.
+	const warmUp = (): void => {
+		if (isAudible() && process.stdin.isTTY && process.stdout.isTTY)
+			keyPlayerFor();
+	};
+
+	// Off macOS each key starts a process: capped, so a fast typist never builds a backlog.
+	let keysInFlight = 0;
+	let lastKeyAtMs: number | undefined;
+	const playThroughHost = async (file: string): Promise<void> => {
+		const nowMs = Date.now();
+		if (keysInFlight >= MAX_KEYS_IN_FLIGHT) return;
+		if (lastKeyAtMs !== undefined && nowMs - lastKeyAtMs < MIN_KEY_GAP_MS)
+			return;
+		lastKeyAtMs = nowMs;
+		keysInFlight += 1;
+		try {
+			const result = await cmd.audio.play({
+				file: await audibleFile(file, prefs.volume),
+				timeoutMs: PLAY_TIMEOUT_MS,
+			});
+			if (result.isPlayed || result.reason !== "no-player") return;
+			isPlayerMissing = true;
+			cmd.ui.notify(
+				"[clacketier] No audio player found (paplay or aplay on Linux, PowerShell on Windows).",
+				"warning",
+			);
+		} finally {
+			keysInFlight -= 1;
+		}
+	};
+
+	const click = (kind: unknown): void => {
+		if (!isKeypressKind(kind) || !isAudible()) return;
+		const sound = keySoundFor({ kind, random: Math.random });
+		if (!sound) return;
+		const file = keySoundPath({
+			soundsDir: SOUNDS_DIR,
+			keyboard: prefs.keyboard,
+			sound,
+		});
+		// Straight to the player, never through a timer: Command Code's event loop is busy
+		// while it draws, and the player spaces out keys that arrive together.
+		const player = keyPlayerFor();
+		if (player) return player.play({ file, volume: prefs.volume });
+		void playThroughHost(file);
+	};
+
+	const save = (next: Prefs): void => {
+		prefs = next;
+		void cmd.store.set(PREFS_STORE_KEY, next);
+		warmUp();
+		// A sample of the new setting, so the change is heard.
+		click("character");
+	};
+
+	cmd.hooks({
+		onSessionStart: warmUp,
+		onSessionEnd: () => keyPlayer?.stop(),
+	});
+	cmd.on("keypress", (event) => click(event.kind));
+
+	cmd.addCommand({
+		name: "clacketier",
+		description: "Mechanical keyboard sounds as you type",
+		argumentHint: "[blue|brown|red|pick|on|off|volume <0-100>]",
+		handler: async ({ args }) => {
+			const action = parseArgs(args);
+			if (action.kind === "invalid") return { message: action.message };
+			if (action.kind === "help") return { message: USAGE };
+			if (action.kind === "pick") {
+				const chosen = await cmd.ui.select({
+					title: "Keyboard",
+					options: KEYBOARDS.map((keyboard) => ({
+						label: keyboard.id,
+						description: `${keyboard.name}: ${keyboard.description}`,
+					})),
+				});
+				const keyboard = chosen ? findKeyboard(chosen) : undefined;
+				if (!keyboard) return { message: describePrefs(prefs) };
+				save({ ...prefs, isOn: true, keyboard: keyboard.id });
+				return { message: describePrefs(prefs) };
+			}
+			if (action.kind === "set") {
+				save({ ...prefs, ...action.change });
+				return { message: describePrefs(prefs) };
+			}
+			const quiet = quietReason(process.env);
+			return {
+				message: formatStatus({
+					prefs,
+					quietNote: quiet ? QUIET_NOTES[quiet] : undefined,
+				}),
+			};
+		},
+	});
+}

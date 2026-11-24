@@ -1,0 +1,48 @@
+{
+	"name": "clacketier",
+	"version": "0.0.1",
+	"description": "Real Cherry MX mechanical keyboard sounds under every key you type into Command Code. Blue, Brown or Red, a few milliseconds after each key.",
+	"type": "module",
+	"license": "MIT",
+	"author": {
+		"name": "Vipul Gupta",
+		"url": "https://mixster.dev"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/vipulgupta2048/clacketier.git"
+	},
+	"homepage": "https://github.com/vipulgupta2048/clacketier#readme",
+	"bugs": "https://github.com/vipulgupta2048/clacketier/issues",
+	"keywords": [
+		"cmd-mod",
+		"cmd-mod-command",
+		"mechanical-keyboard",
+		"cherry-mx",
+		"typing-sounds",
+		"terminal",
+		"commandcode"
+	],
+	"commandcode": {
+		"mods": [
+			"./index.ts"
+		]
+	},
+	"files": [
+		"index.ts",
+		"src",
+		"!src/__tests__",
+		"players",
+		"sounds",
+		"scripts"
+	],
+	"scripts": {
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/node": "^24.10.9",
+		"typescript": "^5.9.2",
+		"vitest": "^4.1.11"
+	}
+}
