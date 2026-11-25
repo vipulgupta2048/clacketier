@@ -4,13 +4,18 @@ Real mechanical keyboard sounds under every key you type into Command Code.
 Cherry MX Blue, Brown or Red, a few milliseconds after each key, keeping up
 with the fastest typing.
 
+[![Clacketier: Cherry MX Blue clicking under every key, with its waveform and feel curve](docs/clacketier.png)](docs/clacketier.mp4)
+
+▶ [Watch it with sound](docs/clacketier.mp4) (33 s)
+
 The sounds are real recordings of Cherry MX switches with ABS keycaps, from
 the [Mechvibes](https://github.com/hainguyents13/mechvibes) project (MIT).
 Zero runtime dependencies.
 
 ## Try it
 
-Needs a Command Code with the `keypress` mod event (after 1.93).
+Needs a Command Code release with the `keypress` mod event. On older releases
+the mod loads but stays silent.
 
 ```bash
 # Install it for every session, from npm
@@ -86,3 +91,5 @@ needs ffmpeg). See `sounds/LICENSE`.
 ## License
 
 MIT. The keyboard recordings are MIT too, from Mechvibes: see `sounds/LICENSE`.
+The switch photos in the video are public domain (Daniel Beardsmore, Wikimedia
+Commons).
