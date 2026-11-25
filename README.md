@@ -1,79 +1,109 @@
+<div align="center">
+
 # Clacketier
 
-Real mechanical keyboard sounds under every key you type into Command Code.
-Cherry MX Blue, Brown or Red, a few milliseconds after each key, keeping up
-with the fastest typing.
+**Your terminal, with the sound of a real mechanical keyboard.**
 
-[![Clacketier: Cherry MX Blue clicking under every key, with its waveform and feel curve](docs/clacketier.png)](docs/clacketier.mp4)
+Every key you type into Command Code clicks like a Cherry MX switch:
+real recordings, a few milliseconds after the key, at any typing speed.
 
-▶ [Watch it with sound](docs/clacketier.mp4) (33 s)
+<a href="docs/clacketier.mp4"><img src="docs/clacketier.gif" alt="Clacketier: a Cherry MX Blue keycap, waveform and feel curve react to every key, then Blue, Brown and Red race to type the same line" width="800"></a>
 
-The sounds are real recordings of Cherry MX switches with ABS keycaps, from
-the [Mechvibes](https://github.com/hainguyents13/mechvibes) project (MIT).
-Zero runtime dependencies.
+**[▶ Watch the 33-second video with sound](docs/clacketier.mp4)**
 
-## Try it
+</div>
 
-Needs a Command Code release with the `keypress` mod event. On older releases
-the mod loads but stays silent.
+## Install
 
 ```bash
-# Install it for every session, from npm
 cmd mods add clacketier -g
+```
 
-# Or straight from GitHub
+That's it. It starts on Cherry MX Blue at half volume. Start typing.
+
+> Needs a Command Code release with the `keypress` mod event. On an older
+> release the mod loads but stays silent.
+
+## Pick your switch
+
+<table>
+<tr>
+<td align="center" width="33%"><img src="docs/switch-blue.jpg" width="96" alt="Cherry MX Blue switch"><br><b>Cherry MX Blue</b><br>Clicky. A loud, crisp click on every key.<br><code>/clacketier blue</code></td>
+<td align="center" width="33%"><img src="docs/switch-brown.jpg" width="96" alt="Cherry MX Brown switch"><br><b>Cherry MX Brown</b><br>Tactile. A soft bump, no click.<br><code>/clacketier brown</code></td>
+<td align="center" width="33%"><img src="docs/switch-red.jpg" width="96" alt="Cherry MX Red switch"><br><b>Cherry MX Red</b><br>Linear. Smooth, deeper, softer.<br><code>/clacketier red</code></td>
+</tr>
+</table>
+
+Every switch is a real recording of that switch with ABS keycaps, from the
+[Mechvibes](https://github.com/hainguyents13/mechvibes) project. Letters rotate
+through eight recorded keys, so a long run never sounds like a loop. Space,
+Enter and Backspace each have their own sound.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `/clacketier` | Shows what's playing and every keyboard |
+| `/clacketier blue` · `brown` · `red` | Switch keyboards, and hear a sample |
+| `/clacketier pick` | Choose a keyboard from a list |
+| `/clacketier volume 30` | Set the volume, 0 to 100 |
+| `/clacketier off` · `on` | Stop or start the clicks |
+
+Your choice is remembered across sessions.
+
+## Questions
+
+**Can it see what I type?**
+No. Command Code tells the mod only what *kind* of key you pressed (a letter,
+space, enter, backspace, a paste), never which key.
+
+**Does it lag when I type fast?**
+No. A click starts about 3 ms after the key. Keys that arrive together still
+click separately, and a click that would land late is skipped rather than
+queued, so nothing keeps clicking after you stop.
+
+**Does it work on Linux and Windows?**
+Yes, through Command Code's own audio player (`paplay` or `aplay`, PowerShell).
+macOS gets a dedicated low-latency player.
+
+**What about SSH and CI?**
+It stays quiet there, since the clicks would play on a machine nobody is
+sitting at. Set `CLACKETIER=on` to force it, or `CLACKETIER=off` to silence it
+anywhere.
+
+**Paste a whole paragraph?**
+One click, not three hundred. Arrow keys and shortcuts stay quiet.
+
+## Other ways to install
+
+```bash
+# Straight from GitHub
 cmd mods add vipulgupta2048/clacketier -g
 
-# Or try it for one session from a clone
+# Just for one session, from a clone
 git clone https://github.com/vipulgupta2048/clacketier
 cmd --mod ./clacketier/index.ts
 ```
 
-It's on from the start with Cherry MX Blue at half volume. Type.
+<details>
+<summary><b>How it keeps up</b> (for the curious)</summary>
 
-| Command | What it does |
-| --- | --- |
-| `/clacketier` | Status, and every keyboard |
-| `/clacketier blue` · `brown` · `red` | Switch keyboard, and hear it |
-| `/clacketier pick` | Choose a keyboard from a list |
-| `/clacketier volume 30` | How loud, 0 to 100 |
-| `/clacketier off` · `on` | Stop or start the clicks |
-
-| Keyboard | Sounds like |
-| --- | --- |
-| Cherry MX Blue | Clicky: a loud, crisp click on every key |
-| Cherry MX Brown | Tactile: a quiet bump, no click |
-| Cherry MX Red | Linear: smooth, deeper and softer |
-
-Letters rotate through eight recorded keys so a run never sounds like a loop;
-space, enter and backspace have their own sounds. Arrow keys and shortcuts stay
-quiet. A paste is one click.
-
-It stays quiet in CI, over SSH (the clicks would play on the remote machine),
-and when `CLACKETIER=off`. `CLACKETIER=on` overrides the CI and SSH guesses.
-
-## What it can see
-
-Command Code tells the mod what *kind* of key was pressed (a character, space,
-enter, backspace, a paste) and never which key. Clacketier can't read what you
-type.
-
-## How it keeps up
-
-Starting a player per key is far too slow: `afplay` takes about a second to
-start on macOS. So on macOS Clacketier runs one long-lived player
-(`players/macos-key-player.js` under `osascript`), an AVAudioEngine with a
+Starting an audio player per key is far too slow: `afplay` takes about a second
+to start on macOS. So on macOS Clacketier runs one long-lived player
+(`players/macos-key-player.js` under `osascript`): an AVAudioEngine with a
 sampler per sound, loaded when the session starts. Each key is one line
-appended to a queue file the player polls every 2 ms, and a click starts about
-3 ms after the key. Keys that arrive together (fast typing, or Command Code
-busy drawing) are spaced 15 ms apart so they sound like separate presses, and a
-key more than 120 ms late is dropped, never queued: nothing clicks after you
-stop.
+appended to a queue file that the player polls every 2 ms. Keys that arrive
+together (fast typing, or Command Code busy redrawing) are spaced 15 ms apart
+so they sound like separate presses, and a key more than 120 ms late is
+dropped.
 
-On Linux and Windows each key goes through Command Code's audio player
-(`paplay`/`aplay`, PowerShell), at most four at once and 18 ms apart.
+On Linux and Windows each key goes through Command Code's audio player, at most
+four at once and 18 ms apart.
 
-## Develop
+</details>
+
+<details>
+<summary><b>Develop</b></summary>
 
 ```bash
 pnpm install
@@ -82,14 +112,13 @@ pnpm typecheck
 ```
 
 `src/mod-api.ts` declares the slice of Command Code's `ModApi` this mod uses,
-so the project typechecks on its own.
+so the project typechecks on its own. The sounds in `sounds/` are cut from the
+Mechvibes packs by `scripts/cut-keyboard-sounds.mjs` (press only, attack first,
+loudness matched; needs ffmpeg).
 
-The sounds in `sounds/` are cut from the Mechvibes packs by
-`scripts/cut-keyboard-sounds.mjs` (press only, attack first, loudness matched;
-needs ffmpeg). See `sounds/LICENSE`.
+</details>
 
 ## License
 
-MIT. The keyboard recordings are MIT too, from Mechvibes: see `sounds/LICENSE`.
-The switch photos in the video are public domain (Daniel Beardsmore, Wikimedia
-Commons).
+MIT. The keyboard recordings are MIT too, from Mechvibes (see `sounds/LICENSE`).
+The switch photos are public domain, by Daniel Beardsmore on Wikimedia Commons.
