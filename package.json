@@ -33,8 +33,7 @@
 		"src",
 		"!src/__tests__",
 		"players",
-		"sounds",
-		"scripts"
+		"sounds"
 	],
 	"scripts": {
 		"test": "vitest run",

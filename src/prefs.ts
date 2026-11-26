@@ -28,9 +28,10 @@ export function parsePrefs(value: unknown): Prefs {
 	const stored = value as Record<string, unknown>;
 	return {
 		isOn: typeof stored.isOn === "boolean" ? stored.isOn : DEFAULT_PREFS.isOn,
+		// The keyboard's id, also when a colour alone ("blue") was stored by hand.
 		keyboard:
-			typeof stored.keyboard === "string" && findKeyboard(stored.keyboard)
-				? stored.keyboard
+			typeof stored.keyboard === "string"
+				? (findKeyboard(stored.keyboard)?.id ?? DEFAULT_PREFS.keyboard)
 				: DEFAULT_PREFS.keyboard,
 		volume:
 			typeof stored.volume === "number" && Number.isFinite(stored.volume)

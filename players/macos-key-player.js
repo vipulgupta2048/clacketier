@@ -23,10 +23,15 @@ ObjC.import('AVFoundation');
 ObjC.import('unistd');
 
 const POLL_SECONDS = 0.002;
+// After this long without a key, poll more slowly so an idle session costs no CPU.
+const BUSY_FOR_MS = 1500;
+const IDLE_POLL_SECONDS = 0.015;
+// The queue file is emptied this long after the last key.
+const EMPTY_AFTER_MS = 300;
 const KEY_STAGGER_MS = 15;
 const MAX_KEY_DELAY_MS = 120;
-// Polls between parent and queue-file checks: about every 0.3 s.
-const LIVENESS_EVERY = 150;
+// How often the player checks that Command Code and the queue file are still there.
+const LIVENESS_MS = 300;
 // The sampler plays a full-scale clip about 11 dB quieter than the file; this puts
 // volume 1 back at the clip's own level.
 const GAIN_AT_FULL_DB = 11;
@@ -93,22 +98,36 @@ function playDue(state, now) {
 	}
 }
 
+// Remove the queue's folder when the player ends for any reason, so a killed Command Code
+// leaves nothing behind. Only a folder the mod made (cmd-key-player-*) is ever removed.
+function removeQueueDir(manager, queue) {
+	const dir = queue.slice(0, queue.lastIndexOf('/'));
+	if (!dir.slice(dir.lastIndexOf('/') + 1).startsWith('cmd-key-player-')) return;
+	manager.removeItemAtPathError(dir, null);
+}
+
 // biome-ignore lint/correctness/noUnusedVariables: osascript calls run() itself.
 function run(argv) {
 	const queue = argv[0];
-	const file = $.NSFileHandle.fileHandleForReadingAtPath(queue);
-	if (!file || file.isNil()) return;
+	const manager = $.NSFileManager.defaultManager;
+	const file = $.NSFileHandle.fileHandleForUpdatingAtPath(queue);
+	if (!file || file.isNil()) return removeQueueDir(manager, queue);
 	const engine = $.AVAudioEngine.alloc.init;
 	// Touching the mixer before start gives the engine a graph it can start with.
 	engine.mainMixerNode;
-	if (!engine.startAndReturnError(null)) return;
+	if (!engine.startAndReturnError(null)) return removeQueueDir(manager, queue);
 	const state = {engine, samplers: {}, gain: undefined, due: [], lastAt: 0};
-	const manager = $.NSFileManager.defaultManager;
 	const parent = $.getppid();
 	let pending = '';
-	for (let poll = 1; ; poll += 1) {
+	let lastDataAt = nowMs();
+	let lastLivenessAt = nowMs();
+	let isEmptied = true;
+	for (;;) {
 		const data = file.availableData;
+		const now = nowMs();
 		if (Number(data.length) > 0) {
+			lastDataAt = now;
+			isEmptied = false;
 			pending += $.NSString.alloc.initWithDataEncoding(
 				data,
 				$.NSUTF8StringEncoding,
@@ -116,16 +135,23 @@ function run(argv) {
 			const end = pending.lastIndexOf('\n');
 			const lines = pending.slice(0, end + 1).split('\n');
 			pending = pending.slice(end + 1);
-			if (lines.includes('quit')) return;
-			const now = nowMs();
+			if (lines.includes('quit')) return removeQueueDir(manager, queue);
 			for (const line of lines)
 				if (line !== '') enqueue(state, line, now);
 		}
 		playDue(state, nowMs());
-		if (state.due.length === 0 && poll % LIVENESS_EVERY === 0) {
-			if ($.getppid() !== parent) return;
-			if (!manager.fileExistsAtPath(queue)) return;
+		const idleMs = now - lastDataAt;
+		// Once typing pauses, empty the queue file: it never holds more than the last burst.
+		if (!isEmptied && pending === '' && state.due.length === 0 && idleMs > EMPTY_AFTER_MS) {
+			file.truncateFileAtOffset(0);
+			isEmptied = true;
 		}
-		$.NSThread.sleepForTimeInterval(POLL_SECONDS);
+		if (state.due.length === 0 && now - lastLivenessAt > LIVENESS_MS) {
+			lastLivenessAt = now;
+			if ($.getppid() !== parent || !manager.fileExistsAtPath(queue))
+				return removeQueueDir(manager, queue);
+		}
+		// Fast polling while someone types, a slower idle poll otherwise.
+		$.NSThread.sleepForTimeInterval(idleMs < BUSY_FOR_MS ? POLL_SECONDS : IDLE_POLL_SECONDS);
 	}
 }

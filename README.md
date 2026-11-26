@@ -20,8 +20,6 @@ cmd mods add clacketier -g
 
 That's it. It starts on Cherry MX Blue at half volume. Start typing.
 
-> release the mod loads but stays silent.
-
 ## Pick your switch
 
 <table>
@@ -49,13 +47,13 @@ Your choice is remembered across sessions.
 ## Questions
 
 **Can it see what I type?**
-It only ever uses the *kind* of key you pressed (a letter, space, enter, backspace, a paste), never which key, and it stores and sends nothing. On Command Code releases with the `keypress` mod event, that's all Command Code tells it. On older releases Clacketier reads the terminal's input itself to tell the kinds apart; the characters pass through and are dropped. Set `CLACKETIER_STDIN=off` to turn that fallback off.
+It only ever uses the *kind* of key you pressed (a letter, space, enter, backspace, a paste), never which key, and it never stores, logs or sends what you type. On Command Code releases with the `keypress` mod event, that's all Command Code tells it. On older releases Clacketier reads the terminal's input itself to tell the kinds apart; the characters pass through and are dropped. (On macOS the player gets one short line per click through a temporary file that is emptied whenever you pause and deleted when the session ends.) Set `CLACKETIER_STDIN=off` to turn that fallback off.
 
 **Does it lag when I type fast?**
-No. A click starts about 3 ms after the key. Keys that arrive together still click separately, and a click that would land late is skipped rather than queued, so nothing keeps clicking after you stop.
+Not on macOS: a click reaches the speaker within about 15 ms of the key. Keys that arrive together still click separately, and a click that would land late is skipped rather than queued, so nothing keeps clicking after you stop.
 
 **Does it work on Linux and Windows?**
-Yes, through Command Code's own audio player (`paplay` or `aplay`, PowerShell). macOS gets a dedicated low-latency player.
+Yes, through Command Code's own audio player (`paplay` or `aplay` on Linux, PowerShell on Windows). Each click starts that player, so clicks trail fast typing a little on Linux and noticeably on Windows. macOS gets a dedicated low-latency player.
 
 **What about SSH and CI?**
 It stays quiet there, since the clicks would play on a machine nobody is sitting at. Set `CLACKETIER=on` to force it, or `CLACKETIER=off` to silence it anywhere.

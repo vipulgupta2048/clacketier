@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -169,6 +170,8 @@ describe("volume", () => {
 });
 
 describe("stdin fallback", () => {
+	const kindsOf = (chunk: string) => classifyChunk({ chunk, isInPaste: false }).kinds;
+
 	it.each([
 		["a", ["character"]],
 		["hi", ["character", "character"]],
@@ -179,15 +182,46 @@ describe("stdin fallback", () => {
 		["\u001b[A", ["other"]],
 		["\u001b", ["other"]],
 		["\u0003", ["other"]],
+		["a\u001b[A", ["character", "other"]],
 		["\u001b[200~pasted text\u001b[201~", ["paste"]],
 		["x".repeat(MAX_KEYS_PER_CHUNK + 1), ["paste"]],
 		["", []],
 	] as const)("classifies %j", (chunk, kinds) => {
-		expect(classifyChunk(chunk)).toEqual(kinds);
+		expect(kindsOf(chunk)).toEqual(kinds);
+	});
+
+	it("keeps a long paste split across chunks to one click", () => {
+		const start = classifyChunk({ chunk: "\u001b[200~first part", isInPaste: false });
+		expect(start).toEqual({ kinds: ["paste"], isInPaste: true });
+		const end = classifyChunk({ chunk: "tail\u001b[201~", isInPaste: true });
+		expect(end).toEqual({ kinds: [], isInPaste: false });
 	});
 
 	it("only listens to a terminal", () => {
 		const notTty = { isTTY: false } as NodeJS.ReadStream;
 		expect(listenToStdin({ stdin: notTty, onKey: () => {} })).toBe(undefined);
+	});
+
+	it("reads only while the app reads, and never takes input on its own", async () => {
+		const stdin = Object.assign(new EventEmitter(), { isTTY: true }) as unknown as NodeJS.ReadStream;
+		const heard: string[] = [];
+		const keys = listenToStdin({ stdin, onKey: (kind) => heard.push(kind) });
+		expect(stdin.listenerCount("data")).toBe(0); // no reader yet: stay out of the way
+		const reader = () => {};
+		stdin.on("readable", reader);
+		await Promise.resolve();
+		expect(stdin.listenerCount("data")).toBe(1);
+		stdin.emit("data", "ok");
+		expect(heard).toEqual(["character", "character"]);
+		stdin.off("readable", reader);
+		expect(stdin.listenerCount("data")).toBe(0); // the app stopped reading: let go
+		keys?.stop();
+		expect(stdin.listenerCount("newListener")).toBe(0);
+	});
+});
+
+describe("prefs keyboard", () => {
+	it("stores the keyboard's id even when a colour alone was saved", () => {
+		expect(parsePrefs({ keyboard: "blue" }).keyboard).toBe("mx-blue");
 	});
 });

@@ -13,7 +13,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -42,7 +42,8 @@ import { scalePcm16Wav } from "./src/volume.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SOUNDS_DIR = join(HERE, "sounds");
 const KEY_PLAYER_SCRIPT = join(HERE, "players", "macos-key-player.js");
-const VOLUME_CACHE_DIR = join(tmpdir(), "clacketier");
+// Per user, never the shared /tmp: another account could plant sounds or links there.
+const VOLUME_CACHE_DIR = join(homedir(), ".cache", "clacketier");
 const PLAY_TIMEOUT_MS = 2_000;
 // A host keypress this soon after a fallback click is the same key, heard twice.
 const STDIN_HANDOVER_MS = 40;
@@ -64,7 +65,7 @@ async function audibleFile(file: string, volume: number): Promise<string> {
 		await mkdir(VOLUME_CACHE_DIR, { recursive: true });
 		// Write then rename, so an interrupted write never leaves a clipped copy behind.
 		const partial = `${copy}.${process.pid}.tmp`;
-		await writeFile(partial, scaled);
+		await writeFile(partial, scaled, { flag: "wx" });
 		await rename(partial, copy);
 		return copy;
 	} catch {
@@ -100,6 +101,14 @@ export default function clacketier(cmd: ModApi): void {
 			),
 		);
 		return player;
+	};
+	// Each session gets one try at starting the player: a session switch stops it, and a
+	// crashed player is replaced on the next session rather than on every key.
+	const resetKeyPlayer = (): void => {
+		keyPlayer?.stop();
+		keyPlayer = undefined;
+		isKeyPlayerTried = false;
+		preloadedKeyboard = undefined;
 	};
 	const keyPlayerFor = (): KeyPlayer | undefined => {
 		if (keyPlayer?.isAlive()) return preloaded(keyPlayer);
@@ -201,12 +210,13 @@ export default function clacketier(cmd: ModApi): void {
 
 	cmd.hooks({
 		onSessionStart: () => {
+			resetKeyPlayer();
 			warmUp();
 			startStdinFallback();
 		},
 		onSessionEnd: () => {
 			stopStdinFallback();
-			keyPlayer?.stop();
+			resetKeyPlayer();
 		},
 	});
 
