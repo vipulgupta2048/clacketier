@@ -1,5 +1,5 @@
 // A long-lived key-click player for macOS, run as
-//   osascript -l JavaScript macos-key-player.js <queue file>
+//   osascript -l JavaScript macos-key-player.js <queue file> <parent pid>
 // The mod appends a line per key to the queue file:
 //   "<volume 0-1>\t<sent at, epoch ms>\t<absolute .wav path>"
 // A line with volume "-" only loads the sound, and "quit" ends the player.
@@ -30,6 +30,8 @@ const IDLE_POLL_SECONDS = 0.015;
 const EMPTY_AFTER_MS = 300;
 const KEY_STAGGER_MS = 15;
 const MAX_KEY_DELAY_MS = 120;
+// A key whose moment passed this long ago (the player stalled) is dropped, not played late.
+const MAX_LATE_MS = 40;
 // How often the player checks that Command Code and the queue file are still there.
 const LIVENESS_MS = 300;
 // The sampler plays a full-scale clip about 11 dB quieter than the file; this puts
@@ -91,8 +93,11 @@ function enqueue(state, line, now) {
 }
 
 function playDue(state, now) {
+	// A change of audio output (headphones, another sample rate) stops the engine: restart it.
+	if (state.due.length > 0 && !state.engine.running) state.engine.startAndReturnError(null);
 	while (state.due.length > 0 && state.due[0].at <= now) {
 		const key = state.due.shift();
+		if (now - key.at > MAX_LATE_MS) continue;
 		setVolume(state, key.level);
 		key.sampler.startNoteWithVelocityOnChannel(MIDI_NOTE, 127, 0);
 	}
@@ -110,6 +115,9 @@ function removeQueueDir(manager, queue) {
 function run(argv) {
 	const queue = argv[0];
 	const manager = $.NSFileManager.defaultManager;
+	// The pid that spawned us; if it already died we were adopted, so end now.
+	const parent = Number(argv[1]) || $.getppid();
+	if ($.getppid() !== parent) return removeQueueDir(manager, queue);
 	const file = $.NSFileHandle.fileHandleForUpdatingAtPath(queue);
 	if (!file || file.isNil()) return removeQueueDir(manager, queue);
 	const engine = $.AVAudioEngine.alloc.init;
@@ -117,7 +125,6 @@ function run(argv) {
 	engine.mainMixerNode;
 	if (!engine.startAndReturnError(null)) return removeQueueDir(manager, queue);
 	const state = {engine, samplers: {}, gain: undefined, due: [], lastAt: 0};
-	const parent = $.getppid();
 	let pending = '';
 	let lastDataAt = nowMs();
 	let lastLivenessAt = nowMs();

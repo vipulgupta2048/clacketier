@@ -24,32 +24,66 @@ export interface ChunkKinds {
 	readonly kinds: readonly KeypressKind[];
 	// Inside a bracketed paste that hasn't ended yet: the next chunks are still the paste.
 	readonly isInPaste: boolean;
+	// The paste's last few characters, in case its end marker is split across chunks.
+	readonly pasteTail: string;
+}
+
+// Inside a paste: silent up to its end marker, then whatever was typed after it.
+function restOfPaste(text: string): ChunkKinds {
+	const endAt = text.indexOf(PASTE_END);
+	if (endAt === -1)
+		return {
+			kinds: [],
+			isInPaste: true,
+			pasteTail: text.slice(-(PASTE_END.length - 1)),
+		};
+	return classifyChunk({
+		chunk: text.slice(endAt + PASTE_END.length),
+		isInPaste: false,
+	});
+}
+
+// How long the escape sequence at the start of `text` is: a CSI sequence (arrows, function
+// keys, focus reports) up to its final byte, SS3 (`ESC O x`), or an Alt chord (`ESC x`).
+function escapeLength(text: string): number {
+	if (text[1] === "[") {
+		const finalAt = text.slice(2).search(/[\u0040-\u007e]/);
+		return finalAt === -1 ? text.length : finalAt + 3;
+	}
+	if (text[1] === "O") return Math.min(3, text.length);
+	return Math.min(2, text.length);
 }
 
 /** The key kinds in one chunk of raw terminal input, in order. Pure. */
 export function classifyChunk(params: {
 	readonly chunk: string;
 	readonly isInPaste: boolean;
+	readonly pasteTail?: string;
 }): ChunkKinds {
-	const { chunk } = params;
-	if (params.isInPaste) {
-		// The rest of a long paste: silent, until its end marker.
-		return { kinds: [], isInPaste: !chunk.includes(PASTE_END) };
+	if (params.isInPaste)
+		return restOfPaste(`${params.pasteTail ?? ""}${params.chunk}`);
+	// Typed characters click; an escape sequence is one quiet key, a paste one click.
+	const kinds: KeypressKind[] = [];
+	let rest = params.chunk;
+	while (rest !== "") {
+		const escAt = rest.indexOf(ESC);
+		const typed = [...(escAt === -1 ? rest : rest.slice(0, escAt))];
+		// Longer than a burst of typing: a paste the terminal didn't mark.
+		kinds.push(
+			...(typed.length > MAX_KEYS_PER_CHUNK
+				? (["paste"] as const)
+				: typed.map(kindOfCharacter)),
+		);
+		if (escAt === -1) break;
+		rest = rest.slice(escAt);
+		if (rest.startsWith(PASTE_START)) {
+			const paste = restOfPaste(rest.slice(PASTE_START.length));
+			return { ...paste, kinds: [...kinds, "paste", ...paste.kinds] };
+		}
+		kinds.push("other");
+		rest = rest.slice(escapeLength(rest));
 	}
-	if (chunk === "") return { kinds: [], isInPaste: false };
-	if (chunk.startsWith(PASTE_START))
-		return { kinds: ["paste"], isInPaste: !chunk.includes(PASTE_END) };
-	// Characters typed before an escape sequence click; the sequence itself (arrows,
-	// function keys, Alt chords, focus reports) is one quiet key.
-	const escAt = chunk.indexOf(ESC);
-	const typed = [...(escAt === -1 ? chunk : chunk.slice(0, escAt))];
-	if (typed.length > MAX_KEYS_PER_CHUNK)
-		return { kinds: ["paste"], isInPaste: false };
-	const kinds = typed.map(kindOfCharacter);
-	return {
-		kinds: escAt === -1 ? kinds : [...kinds, "other"],
-		isInPaste: false,
-	};
+	return { kinds, isInPaste: false, pasteTail: "" };
 }
 
 export interface StdinKeys {
@@ -70,15 +104,18 @@ export function listenToStdin(params: {
 	const { stdin } = params;
 	if (!stdin.isTTY) return undefined;
 	let isInPaste = false;
+	let pasteTail = "";
 	let isAttached = false;
+	let isStopped = false;
 	const onData = (data: Buffer | string): void => {
-		const result = classifyChunk({ chunk: String(data), isInPaste });
+		const result = classifyChunk({ chunk: String(data), isInPaste, pasteTail });
 		isInPaste = result.isInPaste;
+		pasteTail = result.pasteTail;
 		for (const kind of result.kinds) params.onKey(kind);
 	};
 	const hasReader = (): boolean => stdin.listenerCount("readable") > 0;
 	const attach = (): void => {
-		if (isAttached || !hasReader()) return;
+		if (isStopped || isAttached || !hasReader()) return;
 		isAttached = true;
 		stdin.on("data", onData);
 	};
@@ -100,6 +137,7 @@ export function listenToStdin(params: {
 	attach();
 	return {
 		stop: () => {
+			isStopped = true;
 			stdin.off("newListener", onNewListener);
 			stdin.off("removeListener", onRemoveListener);
 			detach();

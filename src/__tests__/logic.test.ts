@@ -118,10 +118,12 @@ describe("key player protocol", () => {
 	it("writes the squared volume and a path with no tabs or newlines", () => {
 		expect(
 			keyPlayerLine({ file: "/k/a.wav", volume: 50, sentAtMs: 12.4 }),
-		).toBe("0.250\t12\t/k/a.wav\n");
+		).toBe("0.2500\t12\t/k/a.wav\n");
+		// The quietest settings stay distinct, never rounded to silence.
+		expect(keyPlayerLine({ file: "/k/a.wav", volume: 1, sentAtMs: 0 })).toMatch(/^0\.0001\t/);
 		expect(
 			keyPlayerLine({ file: "/k/x\ty\n.wav", volume: 200, sentAtMs: 5 }),
-		).toBe("1.000\t5\t/k/x y .wav\n");
+		).toBe("1.0000\t5\t/k/x y .wav\n");
 	});
 
 	it("writes preload lines the player loads without playing", () => {
@@ -183,6 +185,9 @@ describe("stdin fallback", () => {
 		["\u001b", ["other"]],
 		["\u0003", ["other"]],
 		["a\u001b[A", ["character", "other"]],
+		["a\u001b[Ab", ["character", "other", "character"]],
+		["\u001b[1;5C x", ["other", "space", "character"]],
+		["\u001bOPa", ["other", "character"]],
 		["\u001b[200~pasted text\u001b[201~", ["paste"]],
 		["x".repeat(MAX_KEYS_PER_CHUNK + 1), ["paste"]],
 		["", []],
@@ -190,11 +195,23 @@ describe("stdin fallback", () => {
 		expect(kindsOf(chunk)).toEqual(kinds);
 	});
 
+	it("finds a paste end marker split across two chunks, then clicks what follows", () => {
+		const first = classifyChunk({ chunk: "\u001b[200~some text\u001b[2", isInPaste: false });
+		expect(first.isInPaste).toBe(true);
+		const second = classifyChunk({ chunk: "01~ab", isInPaste: true, pasteTail: first.pasteTail });
+		expect(second).toEqual({ kinds: ["character", "character"], isInPaste: false, pasteTail: "" });
+	});
+
+	it("clicks keys typed just before a paste, and the paste once", () => {
+		const result = classifyChunk({ chunk: "a\u001b[200~pasted\u001b[201~b", isInPaste: false });
+		expect(result.kinds).toEqual(["character", "paste", "character"]);
+	});
+
 	it("keeps a long paste split across chunks to one click", () => {
 		const start = classifyChunk({ chunk: "\u001b[200~first part", isInPaste: false });
-		expect(start).toEqual({ kinds: ["paste"], isInPaste: true });
-		const end = classifyChunk({ chunk: "tail\u001b[201~", isInPaste: true });
-		expect(end).toEqual({ kinds: [], isInPaste: false });
+		expect(start).toEqual({ kinds: ["paste"], isInPaste: true, pasteTail: " part" });
+		const end = classifyChunk({ chunk: "tail\u001b[201~", isInPaste: true, pasteTail: start.pasteTail });
+		expect(end).toEqual({ kinds: [], isInPaste: false, pasteTail: "" });
 	});
 
 	it("only listens to a terminal", () => {
@@ -217,6 +234,15 @@ describe("stdin fallback", () => {
 		expect(stdin.listenerCount("data")).toBe(0); // the app stopped reading: let go
 		keys?.stop();
 		expect(stdin.listenerCount("newListener")).toBe(0);
+	});
+
+	it("stays stopped when stopped while a reader is arriving", async () => {
+		const stdin = Object.assign(new EventEmitter(), { isTTY: true }) as unknown as NodeJS.ReadStream;
+		const keys = listenToStdin({ stdin, onKey: () => {} });
+		stdin.on("readable", () => {});
+		keys?.stop();
+		await Promise.resolve();
+		expect(stdin.listenerCount("data")).toBe(0);
 	});
 });
 

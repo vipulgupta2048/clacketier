@@ -22,8 +22,9 @@ interface Stub {
 
 function load(params: {
 	readonly stored?: unknown;
-	readonly playerAnswer?: "played" | "no-player";
+	readonly playerAnswer?: "played" | "no-player" | "throws";
 	readonly selected?: string;
+	readonly isStoreBroken?: boolean;
 }): Stub {
 	const stored = new Map<string, unknown>();
 	if (params.stored) stored.set("prefs", params.stored);
@@ -40,11 +41,15 @@ function load(params: {
 		},
 		store: {
 			get: <T>(key: string) => stored.get(key) as T | undefined,
-			set: async (key, value) => void stored.set(key, value),
+			set: async (key, value) => {
+				if (params.isStoreBroken) throw new Error("read-only store");
+				stored.set(key, value);
+			},
 		},
 		audio: {
 			play: async ({ file }) => {
 				played.push(file);
+				if (params.playerAnswer === "throws") throw new Error("device gone");
 				return params.playerAnswer === "no-player"
 					? { isPlayed: false, reason: "no-player" }
 					: { isPlayed: true };
@@ -147,6 +152,30 @@ describe("clacketier", () => {
 		await settle();
 		expect(stub.played).toHaveLength(1);
 		expect(stub.notices).toHaveLength(1);
+	});
+
+	it("warns once when keys already in flight all find no player", async () => {
+		const stub = load({ playerAnswer: "no-player", stored: { volume: 100 } });
+		for (let index = 0; index < 3; index += 1) {
+			stub.press("character");
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		await settle();
+		expect(stub.notices).toHaveLength(1);
+	});
+
+	it("survives the host's audio player throwing", async () => {
+		const stub = load({ playerAnswer: "throws", stored: { volume: 100 } });
+		stub.press("character");
+		await settle();
+		expect(stub.played).toHaveLength(1);
+	});
+
+	it("keeps the setting and says so when it can't be saved", async () => {
+		const stub = load({ isStoreBroken: true });
+		expect((await stub.run("brown"))?.message).toMatch(/Cherry MX Brown/);
+		await settle();
+		expect(stub.notices[0]).toMatch(/Couldn't save/);
 	});
 
 	it("answers usage and bad arguments", async () => {

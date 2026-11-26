@@ -37,7 +37,7 @@ export function keyPlayerLine(params: {
 }): string {
 	// Perceived loudness is roughly logarithmic, matching the WAV volume scaling.
 	const level = (Math.min(100, Math.max(0, params.volume)) / 100) ** 2;
-	return `${level.toFixed(3)}\t${Math.round(params.sentAtMs)}\t${protocolPath(params.file)}\n`;
+	return `${level.toFixed(4)}\t${Math.round(params.sentAtMs)}\t${protocolPath(params.file)}\n`;
 }
 
 /** The lines that load sounds without playing them. Pure. */
@@ -58,9 +58,15 @@ export function startKeyPlayer(params: {
 		dir = mkdtempSync(join(tmpdir(), "cmd-key-player-"));
 		const queue = join(dir, "queue");
 		fd = openSync(queue, "a");
-		child = spawn("osascript", ["-l", "JavaScript", params.scriptPath, queue], {
-			stdio: "ignore",
-		});
+		// Our pid, so the player can tell if we died before it got going.
+		// By absolute path: a project's own `osascript` earlier on PATH must never run.
+		child = spawn(
+			"/usr/bin/osascript",
+			["-l", "JavaScript", params.scriptPath, queue, String(process.pid)],
+			// Its own process group: a closed terminal's hangup ends Command Code but not the
+			// player, which then sees its parent gone and removes the queue folder.
+			{ stdio: "ignore", detached: true },
+		);
 	} catch {
 		if (fd !== undefined) closeSync(fd);
 		if (dir) rmSync(dir, { recursive: true, force: true });

@@ -33,7 +33,7 @@ import {
 	MAX_KEYS_IN_FLIGHT,
 	MIN_KEY_GAP_MS,
 } from "./src/keyboards.js";
-import type { ModApi } from "./src/mod-api.js";
+import type { KeypressKind, ModApi } from "./src/mod-api.js";
 import { PREFS_STORE_KEY, parsePrefs, type Prefs } from "./src/prefs.js";
 import { QUIET_NOTES, quietReason } from "./src/quiet.js";
 import { listenToStdin, type StdinKeys } from "./src/stdin-keys.js";
@@ -45,12 +45,17 @@ const KEY_PLAYER_SCRIPT = join(HERE, "players", "macos-key-player.js");
 // Per user, never the shared /tmp: another account could plant sounds or links there.
 const VOLUME_CACHE_DIR = join(homedir(), ".cache", "clacketier");
 const PLAY_TIMEOUT_MS = 2_000;
-// A host keypress this soon after a fallback click is the same key, heard twice.
-const STDIN_HANDOVER_MS = 40;
+// The host reports a key right after the fallback read it: a host keypress of the same
+// kind this soon after a fallback click is that key, heard twice.
+const STDIN_HANDOVER_MS = 100;
 
 // Off macOS: the file to hand the host's player, a quieter copy of the WAV below full
-// volume (cached per file and volume). Anything unreadable plays as it is.
-async function audibleFile(file: string, volume: number): Promise<string> {
+// volume (cached per file and volume). Undefined when no quieter copy can be made: a
+// skipped click, never one louder than the volume asked for.
+async function audibleFile(
+	file: string,
+	volume: number,
+): Promise<string | undefined> {
 	if (volume >= 100) return file;
 	try {
 		const { size, mtimeMs } = statSync(file);
@@ -61,15 +66,15 @@ async function audibleFile(file: string, volume: number): Promise<string> {
 		const copy = join(VOLUME_CACHE_DIR, `${key}-${volume}.wav`);
 		if (existsSync(copy)) return copy;
 		const scaled = scalePcm16Wav({ wav: await readFile(file), volume });
-		if (!scaled) return file;
-		await mkdir(VOLUME_CACHE_DIR, { recursive: true });
+		if (!scaled) return undefined;
+		await mkdir(VOLUME_CACHE_DIR, { recursive: true, mode: 0o700 });
 		// Write then rename, so an interrupted write never leaves a clipped copy behind.
 		const partial = `${copy}.${process.pid}.tmp`;
-		await writeFile(partial, scaled, { flag: "wx" });
+		await writeFile(partial, scaled, { flag: "wx", mode: 0o600 });
 		await rename(partial, copy);
 		return copy;
 	} catch {
-		return file;
+		return undefined;
 	}
 }
 
@@ -139,11 +144,15 @@ export default function clacketier(cmd: ModApi): void {
 		lastKeyAtMs = nowMs;
 		keysInFlight += 1;
 		try {
-			const result = await cmd.audio.play({
-				file: await audibleFile(file, prefs.volume),
-				timeoutMs: PLAY_TIMEOUT_MS,
-			});
+			const audible = await audibleFile(file, prefs.volume);
+			if (!audible) return;
+			const result = await cmd.audio
+				.play({ file: audible, timeoutMs: PLAY_TIMEOUT_MS })
+				.catch(() => undefined);
+			if (!result) return;
 			if (result.isPlayed || result.reason !== "no-player") return;
+			// Keys already in flight find the same missing player: warn once.
+			if (isPlayerMissing) return;
 			isPlayerMissing = true;
 			cmd.ui.notify(
 				"[clacketier] No audio player found (paplay or aplay on Linux, PowerShell on Windows).",
@@ -166,31 +175,29 @@ export default function clacketier(cmd: ModApi): void {
 		// Straight to the player, never through a timer: Command Code's event loop is busy
 		// while it draws, and the player spaces out keys that arrive together.
 		const player = keyPlayerFor();
-		if (player) return player.play({ file, volume: prefs.volume });
-		void playThroughHost(file);
-	};
-
-	const save = (next: Prefs): void => {
-		prefs = next;
-		void cmd.store.set(PREFS_STORE_KEY, next);
-		warmUp();
-		// A sample of the new setting, so the change is heard.
-		click("character");
+		if (!player) {
+			void playThroughHost(file);
+			return;
+		}
+		player.play({ file, volume: prefs.volume });
 	};
 
 	// Where keys come from. Command Code releases with the `keypress` mod event tell the mod
 	// each key's kind; on older releases the mod reads the terminal's input itself
 	// (src/stdin-keys.ts). The first host event switches the fallback off for good, and the
-	// keys the fallback already clicked in that moment aren't clicked twice.
+	// keys the fallback already clicked in that moment aren't clicked twice: each host
+	// event matching the next of those keys, in order, is skipped.
 	let stdinKeys: StdinKeys | undefined;
 	let hasHostKeys = false;
-	let lastStdinKeyAtMs = 0;
+	let stdinClicks: { kind: KeypressKind; atMs: number }[] = [];
 	const startStdinFallback = (): void => {
-		if (hasHostKeys || stdinKeys || process.env.CLACKETIER_STDIN === "off") return;
+		// Only while clicks can be heard: muted, the terminal's input is never read.
+		if (hasHostKeys || stdinKeys || !isAudible()) return;
+		if (process.env.CLACKETIER_STDIN === "off") return;
 		stdinKeys = listenToStdin({
 			stdin: process.stdin,
 			onKey: (kind) => {
-				lastStdinKeyAtMs = Date.now();
+				stdinClicks.push({ kind, atMs: Date.now() });
 				click(kind);
 			},
 		});
@@ -199,17 +206,44 @@ export default function clacketier(cmd: ModApi): void {
 		stdinKeys?.stop();
 		stdinKeys = undefined;
 	};
+	const save = (next: Prefs): void => {
+		prefs = next;
+		cmd.store.set(PREFS_STORE_KEY, next).catch(() => {
+			cmd.ui.notify(
+				"[clacketier] Couldn't save this setting; it lasts until Command Code closes.",
+				"warning",
+			);
+		});
+		warmUp();
+		// Muted, the player ends and the terminal's input is left alone; unmuted, both return.
+		if (!isAudible()) {
+			stopStdinFallback();
+			resetKeyPlayer();
+		}
+		startStdinFallback();
+		// A sample of the new setting, so the change is heard.
+		click("character");
+	};
+
 	cmd.on("keypress", (event) => {
 		if (!hasHostKeys) {
 			hasHostKeys = true;
 			stopStdinFallback();
 		}
-		if (Date.now() - lastStdinKeyAtMs < STDIN_HANDOVER_MS) return;
+		const nowMs = Date.now();
+		stdinClicks = stdinClicks.filter(
+			(stdinClick) => nowMs - stdinClick.atMs < STDIN_HANDOVER_MS,
+		);
+		const isHeard = stdinClicks[0]?.kind === event.kind;
+		stdinClicks = isHeard ? stdinClicks.slice(1) : [];
+		if (isHeard) return;
 		click(event.kind);
 	});
 
 	cmd.hooks({
 		onSessionStart: () => {
+			// A player installed since the last session gets another chance.
+			isPlayerMissing = false;
 			resetKeyPlayer();
 			warmUp();
 			startStdinFallback();
