@@ -12,6 +12,7 @@ import {
 } from "../keyboards.js";
 import { DEFAULT_PREFS, parsePrefs } from "../prefs.js";
 import { quietReason } from "../quiet.js";
+import { classifyChunk, listenToStdin, MAX_KEYS_PER_CHUNK } from "../stdin-keys.js";
 import { readPcm16Layout, scalePcm16Wav } from "../volume.js";
 
 const SOUNDS_DIR = join(import.meta.dirname, "..", "..", "sounds");
@@ -164,5 +165,29 @@ describe("volume", () => {
 		expect(scalePcm16Wav({ wav: Buffer.from("ID3"), volume: 50 })).toBe(
 			undefined,
 		);
+	});
+});
+
+describe("stdin fallback", () => {
+	it.each([
+		["a", ["character"]],
+		["hi", ["character", "character"]],
+		[" ", ["space"]],
+		["\r", ["enter"]],
+		["\u007f", ["backspace"]],
+		["a b\r", ["character", "space", "character", "enter"]],
+		["\u001b[A", ["other"]],
+		["\u001b", ["other"]],
+		["\u0003", ["other"]],
+		["\u001b[200~pasted text\u001b[201~", ["paste"]],
+		["x".repeat(MAX_KEYS_PER_CHUNK + 1), ["paste"]],
+		["", []],
+	] as const)("classifies %j", (chunk, kinds) => {
+		expect(classifyChunk(chunk)).toEqual(kinds);
+	});
+
+	it("only listens to a terminal", () => {
+		const notTty = { isTTY: false } as NodeJS.ReadStream;
+		expect(listenToStdin({ stdin: notTty, onKey: () => {} })).toBe(undefined);
 	});
 });

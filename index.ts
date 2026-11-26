@@ -36,6 +36,7 @@ import {
 import type { ModApi } from "./src/mod-api.js";
 import { PREFS_STORE_KEY, parsePrefs, type Prefs } from "./src/prefs.js";
 import { QUIET_NOTES, quietReason } from "./src/quiet.js";
+import { listenToStdin, type StdinKeys } from "./src/stdin-keys.js";
 import { scalePcm16Wav } from "./src/volume.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -43,6 +44,8 @@ const SOUNDS_DIR = join(HERE, "sounds");
 const KEY_PLAYER_SCRIPT = join(HERE, "players", "macos-key-player.js");
 const VOLUME_CACHE_DIR = join(tmpdir(), "clacketier");
 const PLAY_TIMEOUT_MS = 2_000;
+// A host keypress this soon after a fallback click is the same key, heard twice.
+const STDIN_HANDOVER_MS = 40;
 
 // Off macOS: the file to hand the host's player, a quieter copy of the WAV below full
 // volume (cached per file and volume). Anything unreadable plays as it is.
@@ -166,11 +169,46 @@ export default function clacketier(cmd: ModApi): void {
 		click("character");
 	};
 
-	cmd.hooks({
-		onSessionStart: warmUp,
-		onSessionEnd: () => keyPlayer?.stop(),
+	// Where keys come from. Command Code releases with the `keypress` mod event tell the mod
+	// each key's kind; on older releases the mod reads the terminal's input itself
+	// (src/stdin-keys.ts). The first host event switches the fallback off for good, and the
+	// keys the fallback already clicked in that moment aren't clicked twice.
+	let stdinKeys: StdinKeys | undefined;
+	let hasHostKeys = false;
+	let lastStdinKeyAtMs = 0;
+	const startStdinFallback = (): void => {
+		if (hasHostKeys || stdinKeys || process.env.CLACKETIER_STDIN === "off") return;
+		stdinKeys = listenToStdin({
+			stdin: process.stdin,
+			onKey: (kind) => {
+				lastStdinKeyAtMs = Date.now();
+				click(kind);
+			},
+		});
+	};
+	const stopStdinFallback = (): void => {
+		stdinKeys?.stop();
+		stdinKeys = undefined;
+	};
+	cmd.on("keypress", (event) => {
+		if (!hasHostKeys) {
+			hasHostKeys = true;
+			stopStdinFallback();
+		}
+		if (Date.now() - lastStdinKeyAtMs < STDIN_HANDOVER_MS) return;
+		click(event.kind);
 	});
-	cmd.on("keypress", (event) => click(event.kind));
+
+	cmd.hooks({
+		onSessionStart: () => {
+			warmUp();
+			startStdinFallback();
+		},
+		onSessionEnd: () => {
+			stopStdinFallback();
+			keyPlayer?.stop();
+		},
+	});
 
 	cmd.addCommand({
 		name: "clacketier",

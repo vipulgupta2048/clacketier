@@ -20,7 +20,6 @@ cmd mods add clacketier -g
 
 That's it. It starts on Cherry MX Blue at half volume. Start typing.
 
-> Needs a Command Code release with the `keypress` mod event. On an older
 > release the mod loads but stays silent.
 
 ## Pick your switch
@@ -50,7 +49,7 @@ Your choice is remembered across sessions.
 ## Questions
 
 **Can it see what I type?**
-No. Command Code tells the mod only what *kind* of key you pressed (a letter, space, enter, backspace, a paste), never which key.
+It only ever uses the *kind* of key you pressed (a letter, space, enter, backspace, a paste), never which key, and it stores and sends nothing. On Command Code releases with the `keypress` mod event, that's all Command Code tells it. On older releases Clacketier reads the terminal's input itself to tell the kinds apart; the characters pass through and are dropped. Set `CLACKETIER_STDIN=off` to turn that fallback off.
 
 **Does it lag when I type fast?**
 No. A click starts about 3 ms after the key. Keys that arrive together still click separately, and a click that would land late is skipped rather than queued, so nothing keeps clicking after you stop.
