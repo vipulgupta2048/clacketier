@@ -57,6 +57,9 @@ export const KEY_SOUNDS: readonly string[] = [
 export const MAX_KEYS_IN_FLIGHT = 4;
 export const MIN_KEY_GAP_MS = 18;
 
+// A held Backspace repeats about 30 times a second: closer than this, a repeat is quiet.
+export const MIN_BACKSPACE_GAP_MS = 80;
+
 /** A keyboard by id, or by its colour alone (`blue` for `mx-blue`). Pure. */
 export function findKeyboard(id: string): Keyboard | undefined {
 	const wanted = id.toLowerCase();

@@ -1,6 +1,6 @@
 {
 	"name": "clacketier",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Real Cherry MX mechanical keyboard sounds under every key you type into Command Code. Blue, Brown or Red, a few milliseconds after each key.",
 	"type": "module",
 	"license": "MIT",

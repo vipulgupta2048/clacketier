@@ -37,6 +37,8 @@ const MAX_LENGTH_MS = 120;
 // that would clip: no sample goes past MAX_PEAK.
 const TARGET_PEAK_RMS = 0.2;
 const MAX_PEAK = 0.9;
+// Backspace is half as loud (-6 dB): it repeats while held, and at full level it jars.
+const SOUND_GAIN = {backspace: 0.5};
 
 function decode(path) {
 	const raw = execFileSync(
@@ -97,15 +99,14 @@ function cutPress(sprite, timing) {
 	return Float32Array.from(window.subarray(start, end));
 }
 
-function finish(samples) {
+function finish(samples, soundGain = 1) {
 	const peak = samples.reduce(
 		(max, value) => Math.max(max, Math.abs(value)),
 		0,
 	);
-	const gain = Math.min(
-		TARGET_PEAK_RMS / (peakRms(samples) || 1),
-		MAX_PEAK / (peak || 1),
-	);
+	const gain =
+		soundGain *
+		Math.min(TARGET_PEAK_RMS / (peakRms(samples) || 1), MAX_PEAK / (peak || 1));
 	const fade = msToFrames(FADE_MS);
 	return samples.map((value, index) => {
 		const tail = Math.min(1, (samples.length - 1 - index) / fade);
@@ -146,7 +147,10 @@ for (const colour of KEYBOARDS) {
 	const outDir = join(here, '..', 'sounds', `mx-${colour}`);
 	mkdirSync(outDir, {recursive: true});
 	for (const [file, key] of Object.entries(KEYS)) {
-		const samples = finish(cutPress(sprite, definitions[key].timing));
+		const samples = finish(
+			cutPress(sprite, definitions[key].timing),
+			SOUND_GAIN[file],
+		);
 		writeFileSync(join(outDir, `${file}.wav`), encodeWav(samples));
 	}
 	console.log(`wrote ${outDir}`);

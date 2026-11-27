@@ -31,6 +31,7 @@ import {
 	keySoundFor,
 	keySoundPath,
 	MAX_KEYS_IN_FLIGHT,
+	MIN_BACKSPACE_GAP_MS,
 	MIN_KEY_GAP_MS,
 } from "./src/keyboards.js";
 import type { KeypressKind, ModApi } from "./src/mod-api.js";
@@ -163,8 +164,21 @@ export default function clacketier(cmd: ModApi): void {
 		}
 	};
 
+	let lastBackspaceAtMs: number | undefined;
+	// A held Backspace clicks at a calm pace, not with every key repeat.
+	const isBackspaceRepeat = (kind: string): boolean => {
+		if (kind !== "backspace") return false;
+		const nowMs = Date.now();
+		const isRepeat =
+			lastBackspaceAtMs !== undefined &&
+			nowMs - lastBackspaceAtMs < MIN_BACKSPACE_GAP_MS;
+		if (!isRepeat) lastBackspaceAtMs = nowMs;
+		return isRepeat;
+	};
+
 	const click = (kind: unknown): void => {
 		if (!isKeypressKind(kind) || !isAudible()) return;
+		if (isBackspaceRepeat(kind)) return;
 		const sound = keySoundFor({ kind, random: Math.random });
 		if (!sound) return;
 		const file = keySoundPath({

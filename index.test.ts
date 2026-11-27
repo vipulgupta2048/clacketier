@@ -178,6 +178,17 @@ describe("clacketier", () => {
 		expect(stub.notices[0]).toMatch(/Couldn't save/);
 	});
 
+	it("clicks a held Backspace at a calm pace, not on every repeat", async () => {
+		const stub = load({ stored: { volume: 100 } });
+		for (let index = 0; index < 6; index += 1) {
+			stub.press("backspace");
+			await new Promise((resolve) => setTimeout(resolve, 30));
+		}
+		await settle();
+		expect(stub.played.length).toBeGreaterThanOrEqual(2);
+		expect(stub.played.length).toBeLessThanOrEqual(3);
+	});
+
 	it("answers usage and bad arguments", async () => {
 		const stub = load({});
 		expect((await stub.run("help"))?.message).toMatch(/volume <0-100>/);
