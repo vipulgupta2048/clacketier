@@ -328,9 +328,12 @@ def pump(child_fd, clicker):
     stdout_fd = sys.stdout.fileno()
     while True:
         try:
-            ready, _, _ = select.select([child_fd, stdin_fd], [], [])
+            ready, _, _ = select.select([child_fd, stdin_fd], [], [], PREFS_CHECK_S)
         except InterruptedError:
             continue
+        # Settings changed elsewhere take effect between keys, so the player is ready
+        # before the first key after `clacketier on`.
+        clicker.refresh_prefs(time.monotonic())
         if child_fd in ready:
             try:
                 output = os.read(child_fd, READ_SIZE)
