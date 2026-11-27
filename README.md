@@ -8,7 +8,7 @@ Every key you type clicks like a Cherry MX switch: real recordings, a few millis
 
 <a href="docs/clacketier.mp4"><img src="docs/clacketier.gif" alt="Clacketier: a Cherry MX Blue keycap, waveform and feel curve react to every key, then Blue, Brown and Red race to type the same line" width="800"></a>
 
-**[▶ Watch the 33-second video with sound](docs/clacketier.mp4)**
+**[▶ Watch the launch video on X](https://x.com/vipulgupta2048/status/2126313196743266511)**
 
 </div>
 
