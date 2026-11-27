@@ -14,30 +14,32 @@ Every key you type clicks like a Cherry MX switch: real recordings, a few millis
 
 ## Install
 
-```bash
-cmd mods add clacketier -g
-```
-
-That's it. It starts on Cherry MX Blue at half volume. Start typing.
-
-### In any terminal (macOS)
+### Any terminal (macOS)
 
 ```bash
 npm install -g clacketier
 clacketier
 ```
 
-The first run asks once whether to start Clacketier in every new terminal (it adds one line to `~/.zshrc`; `clacketier setup --undo` takes it out). From then on your shell, vim, git, Claude Code, anything you type into, clicks. To try it for one program only: `clacketier -- vim notes.md`.
+Works in every terminal app: Terminal, iTerm2, Ghostty, kitty, Alacritty, WezTerm, the VS Code terminal, inside tmux. Your shell, vim, git, Claude Code, anything you type into, clicks.
 
-The terminal and Command Code share one setting: `clacketier red` in a terminal switches Command Code too, and inside a Clacketier terminal the Command Code mod stays quiet so no key clicks twice.
+The first run asks once whether to start Clacketier in every new terminal (it adds one line to `~/.zshrc`; `clacketier setup --undo` takes it out). To try it for one program only: `clacketier -- vim notes.md`.
+
+### Command Code (macOS, Linux, Windows)
+
+```bash
+cmd mods add clacketier -g
+```
+
+That's it. Both start on Cherry MX Blue at half volume, and they share one setting: `clacketier red` in a terminal switches Command Code too, and inside a Clacketier terminal the Command Code mod stays quiet so no key clicks twice.
 
 ## Pick your switch
 
 <table>
 <tr>
-<td align="center" valign="top" width="33%"><img src="docs/switch-blue.jpg" width="96" alt="Cherry MX Blue switch"><br><b>Cherry MX Blue</b><br>Clicky. A crisp click on every key.<br><code>/clacketier blue</code></td>
-<td align="center" valign="top" width="33%"><img src="docs/switch-brown.jpg" width="96" alt="Cherry MX Brown switch"><br><b>Cherry MX Brown</b><br>Tactile. A soft bump, no click.<br><code>/clacketier brown</code></td>
-<td align="center" valign="top" width="33%"><img src="docs/switch-red.jpg" width="96" alt="Cherry MX Red switch"><br><b>Cherry MX Red</b><br>Linear. Smooth, deeper, softer.<br><code>/clacketier red</code></td>
+<td align="center" valign="top" width="33%"><img src="docs/switch-blue.jpg" width="96" alt="Cherry MX Blue switch"><br><b>Cherry MX Blue</b><br>Clicky. A crisp click on every key.<br><code>clacketier blue</code></td>
+<td align="center" valign="top" width="33%"><img src="docs/switch-brown.jpg" width="96" alt="Cherry MX Brown switch"><br><b>Cherry MX Brown</b><br>Tactile. A soft bump, no click.<br><code>clacketier brown</code></td>
+<td align="center" valign="top" width="33%"><img src="docs/switch-red.jpg" width="96" alt="Cherry MX Red switch"><br><b>Cherry MX Red</b><br>Linear. Smooth, deeper, softer.<br><code>clacketier red</code></td>
 </tr>
 </table>
 
@@ -45,15 +47,16 @@ Every switch is a real recording of that switch with ABS keycaps, from the [Mech
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `/clacketier` | Shows what's playing and every keyboard |
-| `/clacketier blue` · `brown` · `red` | Switch keyboards, and hear a sample |
-| `/clacketier pick` | Choose a keyboard from a list |
-| `/clacketier volume 30` | Set the volume, 0 to 100 |
-| `/clacketier off` · `on` | Stop or start the clicks |
+| In a terminal | In Command Code | What it does |
+| --- | --- | --- |
+| `clacketier status` | `/clacketier` | What's playing, and every keyboard |
+| `clacketier blue` · `brown` · `red` | `/clacketier blue` · `brown` · `red` | Switch keyboards |
+| | `/clacketier pick` | Choose a keyboard from a list |
+| `clacketier volume 30` | `/clacketier volume 30` | Set the volume, 0 to 100 |
+| `clacketier off` · `on` | `/clacketier off` · `on` | Stop or start the clicks |
+| `clacketier setup` · `--undo` | | Start (or stop starting) in every new terminal |
 
-In a terminal it's the same without the slash: `clacketier brown`, `clacketier volume 30`, `clacketier off`, `clacketier status`. Your choice is remembered across sessions.
+Your choice is remembered, and shared between the two.
 
 ## Questions
 
@@ -65,6 +68,9 @@ Not on macOS: a click reaches the speaker within about 15 ms of the key. Keys th
 
 **Does the terminal version slow my terminal down?**
 No. Keys and output pass straight through; a click is sent after the key is already on its way, so a slow or missing sound can never hold up typing. Heavy output (40 MB of `cat`) runs within 2% of a plain terminal, and a new terminal starts about 90 ms later. If Clacketier can't start, your shell starts without it.
+
+**Which terminals?**
+Any terminal app on macOS: Clacketier runs your shell inside it and hears keys before the shell does, so the app around it doesn't matter. One exception: Warp edits your command in its own editor and sends it whole, so there you'll hear the prompt as one click and full-screen programs (vim, Claude Code) key by key.
 
 **Does it work on Linux and Windows?**
 In Command Code, yes, through Command Code's own audio player (`paplay` or `aplay` on Linux, PowerShell on Windows). Each click starts that player, so clicks trail fast typing a little on Linux and noticeably on Windows. macOS gets a dedicated low-latency player. The any-terminal version is macOS only (it uses the system Python from the Xcode command line tools).
