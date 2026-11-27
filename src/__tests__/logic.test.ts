@@ -111,6 +111,8 @@ describe("quiet", () => {
 		expect(quietReason({ SSH_TTY: "/dev/ttys001" })).toBe("ssh");
 		expect(quietReason({ CI: "1", CLACKETIER: "on" })).toBe(undefined);
 		expect(quietReason({ CI: "false" })).toBe(undefined);
+		expect(quietReason({ CLACKETIER_TERMINAL: "1" })).toBe("terminal");
+		expect(quietReason({ CLACKETIER_TERMINAL: "off" })).toBe(undefined);
 	});
 });
 

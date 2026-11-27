@@ -4,7 +4,7 @@
 
 **Your terminal, with the sound of a real mechanical keyboard.**
 
-Every key you type into Command Code clicks like a Cherry MX switch: real recordings, a few milliseconds after the key, at any typing speed.
+Every key you type clicks like a Cherry MX switch: real recordings, a few milliseconds after the key, at any typing speed. In Command Code, or in any terminal on macOS.
 
 <a href="docs/clacketier.mp4"><img src="docs/clacketier.gif" alt="Clacketier: a Cherry MX Blue keycap, waveform and feel curve react to every key, then Blue, Brown and Red race to type the same line" width="800"></a>
 
@@ -19,6 +19,17 @@ cmd mods add clacketier -g
 ```
 
 That's it. It starts on Cherry MX Blue at half volume. Start typing.
+
+### In any terminal (macOS)
+
+```bash
+npm install -g clacketier
+clacketier
+```
+
+The first run asks once whether to start Clacketier in every new terminal (it adds one line to `~/.zshrc`; `clacketier setup --undo` takes it out). From then on your shell, vim, git, Claude Code, anything you type into, clicks. To try it for one program only: `clacketier -- vim notes.md`.
+
+The terminal and Command Code share one setting: `clacketier red` in a terminal switches Command Code too, and inside a Clacketier terminal the Command Code mod stays quiet so no key clicks twice.
 
 ## Pick your switch
 
@@ -42,18 +53,21 @@ Every switch is a real recording of that switch with ABS keycaps, from the [Mech
 | `/clacketier volume 30` | Set the volume, 0 to 100 |
 | `/clacketier off` · `on` | Stop or start the clicks |
 
-Your choice is remembered across sessions.
+In a terminal it's the same without the slash: `clacketier brown`, `clacketier volume 30`, `clacketier off`, `clacketier status`. Your choice is remembered across sessions.
 
 ## Questions
 
 **Can it see what I type?**
-It only ever uses the *kind* of key you pressed (a letter, space, enter, backspace, a paste), never which key, and it never stores, logs or sends what you type. On Command Code releases with the `keypress` mod event, that's all Command Code tells it. On older releases Clacketier reads the terminal's input itself to tell the kinds apart; the characters pass through and are dropped. (On macOS the player gets one short line per click through a temporary file that is emptied whenever you pause and deleted when the session ends.) It never reads anything while the clicks are off, and `CLACKETIER_STDIN=off` turns that fallback off for good.
+It only ever uses the *kind* of key you pressed (a letter, space, enter, backspace, a paste), never which key, and it never stores, logs or sends what you type. On Command Code releases with the `keypress` mod event, that's all Command Code tells it. On older releases Clacketier reads the terminal's input itself to tell the kinds apart; the characters pass through and are dropped. (On macOS the player gets one short line per click through a temporary file that is emptied whenever you pause and deleted when the session ends.) It never reads anything while the clicks are off, and `CLACKETIER_STDIN=off` turns that fallback off for good. The terminal version works the same way: it passes every key on unchanged and keeps only its kind.
 
 **Does it lag when I type fast?**
 Not on macOS: a click reaches the speaker within about 15 ms of the key. Keys that arrive together still click separately, and a click that would land late is skipped rather than queued, so nothing keeps clicking after you stop.
 
+**Does the terminal version slow my terminal down?**
+No. Keys and output pass straight through; a click is sent after the key is already on its way, so a slow or missing sound can never hold up typing. Heavy output (40 MB of `cat`) runs within 2% of a plain terminal, and a new terminal starts about 90 ms later. If Clacketier can't start, your shell starts without it.
+
 **Does it work on Linux and Windows?**
-Yes, through Command Code's own audio player (`paplay` or `aplay` on Linux, PowerShell on Windows). Each click starts that player, so clicks trail fast typing a little on Linux and noticeably on Windows. macOS gets a dedicated low-latency player.
+In Command Code, yes, through Command Code's own audio player (`paplay` or `aplay` on Linux, PowerShell on Windows). Each click starts that player, so clicks trail fast typing a little on Linux and noticeably on Windows. macOS gets a dedicated low-latency player. The any-terminal version is macOS only (it uses the system Python from the Xcode command line tools).
 
 **What about SSH and CI?**
 It stays quiet there, since the clicks would play on a machine nobody is sitting at. Set `CLACKETIER=on` to force it, or `CLACKETIER=off` to silence it anywhere.

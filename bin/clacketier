@@ -1,0 +1,15 @@
+#!/bin/sh
+# Clacketier for the terminal: the work is in terminal/clacketier.py, run by the macOS
+# system Python (it comes with the Xcode command line tools, as git does).
+here=$(cd "$(dirname "$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)
+python=/usr/bin/python3
+if [ "$(uname)" = Darwin ] && "$python" -c "" >/dev/null 2>&1; then
+	exec "$python" "$here/terminal/clacketier.py" "$@"
+fi
+# No Python: never leave a terminal without its shell.
+if [ $# -eq 0 ] && [ -t 0 ]; then
+	echo "clacketier: needs /usr/bin/python3 (xcode-select --install). Starting your shell without clicks." >&2
+	CLACKETIER_TERMINAL=off exec "${SHELL:-/bin/zsh}"
+fi
+echo "clacketier: needs macOS with /usr/bin/python3 (xcode-select --install)." >&2
+exit 1
