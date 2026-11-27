@@ -3,3 +3,9 @@ node_modules/
 .DS_Store
 .commandcode/
 launch/
+
+# Staged into cli/ by scripts/stage-cli.mjs before publishing
+cli/players/
+cli/sounds/
+cli/README.md
+cli/LICENSE

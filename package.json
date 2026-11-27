@@ -1,7 +1,7 @@
 {
-	"name": "clacketier",
-	"version": "0.1.1",
-	"description": "Real Cherry MX mechanical keyboard sounds under every key you type: in Command Code, or in any terminal on macOS. Blue, Brown or Red, a few milliseconds after each key.",
+	"name": "cmd-mod-clacketier",
+	"version": "0.2.0",
+	"description": "Real Cherry MX Blue, Brown and Red keyboard recordings under every key you type into Command Code. Low-latency on macOS.",
 	"type": "module",
 	"license": "MIT",
 	"author": {
@@ -20,12 +20,8 @@
 		"mechanical-keyboard",
 		"cherry-mx",
 		"typing-sounds",
-		"terminal",
 		"commandcode"
 	],
-	"bin": {
-		"clacketier": "./bin/clacketier"
-	},
 	"commandcode": {
 		"mods": [
 			"./index.ts"
@@ -33,16 +29,13 @@
 	},
 	"files": [
 		"index.ts",
-		"bin",
-		"terminal",
-		"!terminal/test_*.py",
 		"src",
 		"!src/__tests__",
 		"players",
 		"sounds"
 	],
 	"scripts": {
-		"test": "vitest run && /usr/bin/python3 -m unittest discover -s terminal",
+		"test": "vitest run && /usr/bin/python3 -m unittest discover -s cli/terminal",
 		"typecheck": "tsc --noEmit"
 	},
 	"devDependencies": {

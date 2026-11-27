@@ -9,7 +9,7 @@
 # Python's standard library has the pseudo-terminal; Node needs a native add-on for it.
 # Keys and output pass straight through: the clicks are a side effect that can never
 # slow or break the terminal. Sounds play through the same long-lived macOS player as
-# the Command Code mod (players/macos-key-player.js), and the settings are the mod's.
+# the Command Code mod (cmd-mod-clacketier), and the settings are shared with it.
 
 import errno
 import fcntl
@@ -25,7 +25,10 @@ import termios
 import time
 import tty
 
-HERE = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# The installed package carries its own sounds and player; in the repo they sit one
+# level up, shared with the Command Code mod.
+PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+HERE = PACKAGE_DIR if os.path.isdir(os.path.join(PACKAGE_DIR, "sounds")) else os.path.dirname(PACKAGE_DIR)
 SOUNDS_DIR = os.path.join(HERE, "sounds")
 PLAYER_SCRIPT = os.path.join(HERE, "players", "macos-key-player.js")
 # The Command Code mod's own store, so both always play the same keyboard.

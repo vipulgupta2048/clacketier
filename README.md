@@ -27,8 +27,10 @@ The first run asks once whether to start Clacketier in every new terminal (it ad
 
 ### Command Code (macOS, Linux, Windows)
 
+A separate, smaller package: just the mod, no terminal wrapper.
+
 ```bash
-cmd mods add clacketier -g
+cmd mods add cmd-mod-clacketier -g
 ```
 
 That's it. Both start on Cherry MX Blue at half volume, and they share one setting: `clacketier red` in a terminal switches Command Code too, and inside a Clacketier terminal the Command Code mod stays quiet so no key clicks twice.
@@ -106,9 +108,11 @@ On Linux and Windows each key goes through Command Code's audio player, at most 
 
 ```bash
 pnpm install
-pnpm test        # keys, prefs, /clacketier, the player protocol, and the mod through a stub of the mod API
+pnpm test        # the mod (vitest) and the terminal wrapper (python unittest)
 pnpm typecheck
 ```
+
+Two npm packages from one repo: the root is `cmd-mod-clacketier` (the Command Code mod), and `cli/` is `clacketier` (the terminal command). Both play the same `sounds/` through the same `players/`; `npm publish` in `cli/` copies them in first (`scripts/stage-cli.mjs`).
 
 `src/mod-api.ts` declares the slice of Command Code's `ModApi` this mod uses, so the project typechecks on its own. The sounds in `sounds/` are cut from the Mechvibes packs by `scripts/cut-keyboard-sounds.mjs` (press only, attack first, loudness matched; needs ffmpeg).
 

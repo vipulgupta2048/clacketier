@@ -1,0 +1,41 @@
+{
+	"name": "clacketier",
+	"version": "0.2.0",
+	"description": "Real Cherry MX mechanical keyboard sounds under every key you type, in any macOS terminal. Blue, Brown or Red, a few milliseconds after each key.",
+	"license": "MIT",
+	"author": {
+		"name": "Vipul Gupta",
+		"url": "https://mixster.dev"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/vipulgupta2048/clacketier.git",
+		"directory": "cli"
+	},
+	"homepage": "https://github.com/vipulgupta2048/clacketier#readme",
+	"bugs": "https://github.com/vipulgupta2048/clacketier/issues",
+	"keywords": [
+		"mechanical-keyboard",
+		"cherry-mx",
+		"typing-sounds",
+		"terminal",
+		"macos",
+		"cli"
+	],
+	"os": [
+		"darwin"
+	],
+	"bin": {
+		"clacketier": "./bin/clacketier"
+	},
+	"files": [
+		"bin",
+		"terminal",
+		"!terminal/test_*.py",
+		"players",
+		"sounds"
+	],
+	"scripts": {
+		"prepack": "node ../scripts/stage-cli.mjs"
+	}
+}
